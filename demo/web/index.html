@@ -746,7 +746,8 @@
         if (data.type === 'status') {
           addDebugLogEntry('system', `Status: ${data.message}`, { timestamp: data.timestamp });
         } else if (data.type === 'invocation') {
-          addDebugLogEntry('system', 'LLM invocation started', { timestamp: data.timestamp });
+          const promptText = data.prompt ? `\n\nPrompt:\n${data.prompt}` : '';
+          addDebugLogEntry('system', `LLM invocation started${promptText}`, { timestamp: data.timestamp });
         } else if (data.type === 'thought_start') {
           currentThoughtEntry = null; // Reset thought entry
           addDebugLogEntry('ai-thinking', '', { timestamp: data.timestamp });

@@ -189,11 +189,12 @@ Your previous thoughts:
             # Get current timestamp
             current_timestamp = datetime.now().isoformat()
             
-            # Send invocation status to debug only
+            # Send invocation status to debug only (include prompt)
             await broadcast_to_debug({
                 "type": "invocation",
                 "timestamp": current_timestamp,
-                "message": "Invoking LLM..."
+                "message": "Invoking LLM...",
+                "prompt": system_prompt
             })
             
             # Signal that a new thought is starting (debug only)
