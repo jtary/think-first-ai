@@ -18,6 +18,8 @@ debug_connections: Set[WebSocket] = set()
 # Store conversation history per connection
 conversation_histories: Dict[WebSocket, List[Dict]] = {}
 wake_up_active: Dict[WebSocket, bool] = {}
+user_messages: Dict[WebSocket, List[Dict]] = {}
+thinking_interrupt: Dict[WebSocket, asyncio.Event] = {}
 
 def resolve_directory(path: str) -> str:
     return os.path.join(os.path.dirname(__file__), path)
@@ -41,7 +43,9 @@ async def websocket_chat(websocket: WebSocket):
     await websocket.accept()
     chat_connections.add(websocket)
     conversation_histories[websocket] = []
+    user_messages[websocket] = []
     wake_up_active[websocket] = False
+    thinking_interrupt[websocket] = asyncio.Event()
     print(f"Chat WebSocket connected. Total connections: {len(chat_connections)}")
     
     try:
@@ -64,6 +68,7 @@ async def websocket_chat(websocket: WebSocket):
                 asyncio.create_task(wake_up_loop(websocket))
             elif message.get("type") == "sleep":
                 wake_up_active[websocket] = False
+                thinking_interrupt[websocket].set()  # Interrupt any ongoing thinking
                 status_msg = {
                     "type": "status",
                     "message": "AI is going to sleep...",
@@ -71,11 +76,27 @@ async def websocket_chat(websocket: WebSocket):
                 }
                 await websocket.send_json(status_msg)
                 await broadcast_to_debug(status_msg)
+            elif message.get("type") == "user_message":
+                # Store user message and interrupt thinking
+                user_msg = {
+                    "content": message.get("content", ""),
+                    "timestamp": message.get("timestamp", datetime.now().isoformat())
+                }
+                user_messages[websocket].append(user_msg)
+                await broadcast_to_debug({
+                    "type": "user-message",
+                    "content": user_msg["content"],
+                    "timestamp": user_msg["timestamp"]
+                })
+                # Interrupt current thinking to process user message
+                thinking_interrupt[websocket].set()
             
     except WebSocketDisconnect:
         chat_connections.discard(websocket)
         conversation_histories.pop(websocket, None)
+        user_messages.pop(websocket, None)
         wake_up_active.pop(websocket, None)
+        thinking_interrupt.pop(websocket, None)
         print(f"Chat WebSocket disconnected. Total connections: {len(chat_connections)}")
 
 
@@ -127,8 +148,12 @@ async def wake_up_loop(websocket: WebSocket):
     """Main loop that continuously invokes the LLM with previous thoughts"""
     while wake_up_active.get(websocket, False):
         try:
-            # Get conversation history
+            # Reset interrupt event
+            thinking_interrupt[websocket].clear()
+            
+            # Get conversation history and user messages
             history = conversation_histories.get(websocket, [])
+            user_msgs = user_messages.get(websocket, [])
             
             # Build the prompt with system instructions and history
             system_prompt = """You are an AI that thinks before speaking. You have access to a tool to send messages to the user.
@@ -149,28 +174,29 @@ Your previous thoughts:
             else:
                 system_prompt += "\n(No previous thoughts yet)\n"
             
+            # Add user messages to the prompt
+            if user_msgs:
+                system_prompt += "\n\nUser messages:\n"
+                for msg in user_msgs:
+                    timestamp = msg.get("timestamp", "")
+                    content = msg.get("content", "")
+                    system_prompt += f"\n[{timestamp}] User: {content}\n"
+                # Clear user messages after processing
+                user_messages[websocket] = []
+            
             system_prompt += "\n\nContinue thinking. If you want to send a message to the user, use the send_message_to_user tool."
             
             # Get current timestamp
             current_timestamp = datetime.now().isoformat()
             
-            # Send status to chat and debug
-            await websocket.send_json({
-                "type": "invocation",
-                "timestamp": current_timestamp,
-                "message": "Invoking LLM..."
-            })
+            # Send invocation status to debug only
             await broadcast_to_debug({
                 "type": "invocation",
                 "timestamp": current_timestamp,
                 "message": "Invoking LLM..."
             })
             
-            # Signal that a new thought is starting (clear previous)
-            await websocket.send_json({
-                "type": "thought_start",
-                "timestamp": current_timestamp
-            })
+            # Signal that a new thought is starting (debug only)
             await broadcast_to_debug({
                 "type": "thought_start",
                 "timestamp": current_timestamp
@@ -192,6 +218,11 @@ Your previous thoughts:
                         response.raise_for_status()
                         
                         async for line in response.aiter_lines():
+                            # Check for interrupt
+                            interrupt_event = thinking_interrupt.get(websocket)
+                            if interrupt_event and interrupt_event.is_set():
+                                break
+                            
                             if line:
                                 try:
                                     data = json.loads(line)
@@ -210,11 +241,14 @@ Your previous thoughts:
                                 except json.JSONDecodeError:
                                     continue
                     
-                    # Store the thought in history
-                    conversation_histories[websocket].append({
-                        "timestamp": current_timestamp,
-                        "thought": full_response
-                    })
+                    # Only store thought if not interrupted
+                    interrupt_event = thinking_interrupt.get(websocket)
+                    if (not interrupt_event or not interrupt_event.is_set()) and full_response:
+                        # Store the thought in history
+                        conversation_histories[websocket].append({
+                            "timestamp": current_timestamp,
+                            "thought": full_response
+                        })
                     
                     # Parse for tool calls
                     tool_calls = parse_tool_calls(full_response)
@@ -243,8 +277,13 @@ Your previous thoughts:
                                 "timestamp": current_timestamp
                             })
                     
-                    # Small delay before next invocation
-                    await asyncio.sleep(1)
+                    # Small delay before next invocation (unless interrupted)
+                    interrupt_event = thinking_interrupt.get(websocket)
+                    if not interrupt_event or not interrupt_event.is_set():
+                        await asyncio.sleep(1)
+                    else:
+                        # If interrupted, continue immediately to process user message
+                        continue
                     
                 except httpx.RequestError as e:
                     error_msg = f"Error connecting to Ollama: {str(e)}"

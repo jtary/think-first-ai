@@ -484,9 +484,8 @@
       <h1>🧠 Think First AI</h1>
       <div class="header-controls">
         <div class="status-group">
-          <div id="thoughtsStatus" class="status-item disconnected">Thoughts: Disconnected</div>
-          <div id="outputsStatus" class="status-item disconnected">Outputs: Disconnected</div>
-          <div id="wakeUpStatus" class="status-item disconnected">AI: Sleeping</div>
+          <div id="wakeUpStatus" class="status-item disconnected">Chat: Disconnected</div>
+          <div id="thoughtsStatus" class="status-item disconnected">Debug: Disconnected</div>
         </div>
         <button id="wakeUpBtn" onclick="toggleWakeUp()">Wake Up</button>
         <button id="debugToggleBtn" class="debug-toggle-btn" onclick="toggleDebugSidebar()">Debug</button>
@@ -509,9 +508,8 @@
   </div>
 
   <script>
-    let thoughtsWS = null;
-    let outputsWS = null;
-    let wakeUpWS = null;
+    let chatWS = null;
+    let debugWS = null;
     let isAwake = false;
     let currentThinkingIndicator = null;
     let currentAIMessage = null;
@@ -667,135 +665,86 @@
     }
 
     function connectWebSockets() {
-      // Connect to thoughts WebSocket
-      thoughtsWS = new WebSocket('ws://localhost:8000/ws/thoughts');
+      // Connect to chat WebSocket
+      chatWS = new WebSocket('ws://localhost:8000/ws/chat');
 
-      thoughtsWS.onopen = () => {
-        document.getElementById('thoughtsStatus').textContent = 'Thoughts: Connected';
-        document.getElementById('thoughtsStatus').className = 'status-item connected';
-        addDebugLogEntry('system', 'Thoughts WebSocket connected');
-      };
-
-      thoughtsWS.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'thought') {
-          // Thoughts are now shown via wakeup WebSocket
-          addDebugLogEntry('ai-thinking', data.content, { done: data.done });
-        } else if (data.type === 'error') {
-          showError(data.message);
-          addDebugLogEntry('error', data.message);
-        }
-      };
-
-      thoughtsWS.onerror = () => {
-        document.getElementById('thoughtsStatus').textContent = 'Thoughts: Error';
-        document.getElementById('thoughtsStatus').className = 'status-item disconnected';
-      };
-
-      thoughtsWS.onclose = () => {
-        document.getElementById('thoughtsStatus').textContent = 'Thoughts: Disconnected';
-        document.getElementById('thoughtsStatus').className = 'status-item disconnected';
-        setTimeout(connectWebSockets, 3000);
-      };
-
-      // Connect to outputs WebSocket
-      outputsWS = new WebSocket('ws://localhost:8000/ws/outputs');
-
-      outputsWS.onopen = () => {
-        document.getElementById('outputsStatus').textContent = 'Outputs: Connected';
-        document.getElementById('outputsStatus').className = 'status-item connected';
-        addDebugLogEntry('system', 'Outputs WebSocket connected');
-      };
-
-      outputsWS.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'user_message') {
-          // Message from AI via tool call
-          hideThinkingIndicator();
-          const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : null;
-          addMessage(data.content, false, timestamp);
-          addDebugLogEntry('ai-message', data.content, { timestamp: data.timestamp });
-          currentAIMessage = null;
-        } else if (data.type === 'error') {
-          hideThinkingIndicator();
-          showError(data.message);
-          addDebugLogEntry('error', data.message);
-        }
-      };
-
-      outputsWS.onerror = () => {
-        document.getElementById('outputsStatus').textContent = 'Outputs: Error';
-        document.getElementById('outputsStatus').className = 'status-item disconnected';
-      };
-
-      outputsWS.onclose = () => {
-        document.getElementById('outputsStatus').textContent = 'Outputs: Disconnected';
-        document.getElementById('outputsStatus').className = 'status-item disconnected';
-        setTimeout(connectWebSockets, 3000);
-      };
-
-      // Connect to wake up WebSocket
-      wakeUpWS = new WebSocket('ws://localhost:8000/ws/wakeup');
-
-      wakeUpWS.onopen = () => {
-        document.getElementById('wakeUpStatus').textContent = 'AI: Connected';
+      chatWS.onopen = () => {
+        document.getElementById('wakeUpStatus').textContent = 'Chat: Connected';
         document.getElementById('wakeUpStatus').className = 'status-item connected';
-        addDebugLogEntry('system', 'Wake Up WebSocket connected');
       };
 
-      wakeUpWS.onmessage = (event) => {
+      chatWS.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
         if (data.type === 'status') {
           const statusEl = document.getElementById('wakeUpStatus');
           statusEl.textContent = `AI: ${data.message}`;
           statusEl.className = 'status-item connected';
+        } else if (data.type === 'ai_message') {
+          // Message from AI via tool call - only actual messages go to chat
+          hideThinkingIndicator();
+          const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : null;
+          addMessage(data.content, false, timestamp);
+          currentAIMessage = null;
+        } else if (data.type === 'error') {
+          document.getElementById('wakeUpStatus').textContent = 'AI: Error';
+          document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+          hideThinkingIndicator();
+          showError(data.message);
+        }
+      };
+
+      chatWS.onerror = () => {
+        document.getElementById('wakeUpStatus').textContent = 'Chat: Error';
+        document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+      };
+
+      chatWS.onclose = () => {
+        document.getElementById('wakeUpStatus').textContent = 'Chat: Disconnected';
+        document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+        setTimeout(connectWebSockets, 3000);
+      };
+
+      // Connect to debug WebSocket
+      debugWS = new WebSocket('ws://localhost:8000/ws/debug');
+
+      debugWS.onopen = () => {
+        document.getElementById('thoughtsStatus').textContent = 'Debug: Connected';
+        document.getElementById('thoughtsStatus').className = 'status-item connected';
+        addDebugLogEntry('system', 'Debug WebSocket connected');
+      };
+
+      debugWS.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'status') {
           addDebugLogEntry('system', `Status: ${data.message}`, { timestamp: data.timestamp });
         } else if (data.type === 'invocation') {
-          const statusEl = document.getElementById('wakeUpStatus');
-          statusEl.textContent = `AI: Thinking (${new Date(data.timestamp).toLocaleTimeString()})`;
-          statusEl.className = 'status-item connected';
-          showThinkingIndicator();
           addDebugLogEntry('system', 'LLM invocation started', { timestamp: data.timestamp });
         } else if (data.type === 'thought_start') {
-          // New thought starting
-          currentAIMessage = null;
-          hideThinkingIndicator();
           currentThoughtEntry = null; // Reset thought entry
           addDebugLogEntry('ai-thinking', '', { timestamp: data.timestamp });
         } else if (data.type === 'thought_chunk') {
-          // Stream thought chunks - show as thinking process
-          hideThinkingIndicator();
-          const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : null;
-          updateAIMessage(data.content, timestamp);
           addDebugLogEntry('ai-thinking', data.content, { timestamp: data.timestamp, chunk: true });
         } else if (data.type === 'tool_call') {
-          const statusEl = document.getElementById('wakeUpStatus');
-          statusEl.textContent = `AI: Sent message (${new Date(data.timestamp).toLocaleTimeString()})`;
-          statusEl.className = 'status-item connected';
-          hideThinkingIndicator();
           currentThoughtEntry = null; // Reset thought entry after tool call
           addDebugLogEntry('tool-call', {
             tool: data.tool,
             message: data.message
           }, { timestamp: data.timestamp });
         } else if (data.type === 'error') {
-          document.getElementById('wakeUpStatus').textContent = 'AI: Error';
-          document.getElementById('wakeUpStatus').className = 'status-item disconnected';
-          hideThinkingIndicator();
-          showError(data.message);
           addDebugLogEntry('error', data.message, { timestamp: data.timestamp });
         }
       };
 
-      wakeUpWS.onerror = () => {
-        document.getElementById('wakeUpStatus').textContent = 'AI: Error';
-        document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+      debugWS.onerror = () => {
+        document.getElementById('thoughtsStatus').textContent = 'Debug: Error';
+        document.getElementById('thoughtsStatus').className = 'status-item disconnected';
       };
 
-      wakeUpWS.onclose = () => {
-        document.getElementById('wakeUpStatus').textContent = 'AI: Disconnected';
-        document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+      debugWS.onclose = () => {
+        document.getElementById('thoughtsStatus').textContent = 'Debug: Disconnected';
+        document.getElementById('thoughtsStatus').className = 'status-item disconnected';
         setTimeout(connectWebSockets, 3000);
       };
     }
@@ -804,28 +753,31 @@
       const prompt = document.getElementById('promptInput').value.trim();
       if (!prompt) return;
 
+      if (!chatWS || chatWS.readyState !== WebSocket.OPEN) {
+        alert('Chat WebSocket is not connected. Please wait for connection.');
+        return;
+      }
+
       // Add user message to chat
       addMessage(prompt, true);
 
       // Log to debug
       addDebugLogEntry('user-message', prompt);
 
-      // Send to WebSockets if needed (for legacy support)
-      if (thoughtsWS && thoughtsWS.readyState === WebSocket.OPEN) {
-        thoughtsWS.send(JSON.stringify({ type: 'generate', prompt }));
-      }
-
-      if (outputsWS && outputsWS.readyState === WebSocket.OPEN) {
-        outputsWS.send(JSON.stringify({ type: 'generate', prompt }));
-      }
+      // Send user message to backend via chat socket
+      chatWS.send(JSON.stringify({
+        type: 'user_message',
+        content: prompt,
+        timestamp: new Date().toISOString()
+      }));
 
       // Clear input
       document.getElementById('promptInput').value = '';
     }
 
     function toggleWakeUp() {
-      if (!wakeUpWS || wakeUpWS.readyState !== WebSocket.OPEN) {
-        alert('Wake up WebSocket is not connected. Please wait for connection.');
+      if (!chatWS || chatWS.readyState !== WebSocket.OPEN) {
+        alert('Chat WebSocket is not connected. Please wait for connection.');
         return;
       }
 
@@ -835,13 +787,13 @@
         isAwake = true;
         btn.textContent = 'Sleep';
         btn.classList.add('active');
-        wakeUpWS.send(JSON.stringify({ type: 'wake_up' }));
+        chatWS.send(JSON.stringify({ type: 'wake_up' }));
         addDebugLogEntry('system', 'AI wake up command sent');
       } else {
         isAwake = false;
         btn.textContent = 'Wake Up';
         btn.classList.remove('active');
-        wakeUpWS.send(JSON.stringify({ type: 'sleep' }));
+        chatWS.send(JSON.stringify({ type: 'sleep' }));
         addDebugLogEntry('system', 'AI sleep command sent');
       }
     }
