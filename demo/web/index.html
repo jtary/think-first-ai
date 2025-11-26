@@ -12,12 +12,18 @@
       box-sizing: border-box;
     }
 
+    :root {
+      --header-height: 60px;
+      --sidebar-width: 400px;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
 
     .header {
@@ -25,6 +31,7 @@
       padding: 15px 20px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       z-index: 10;
+      height: var(--header-height);
     }
 
     .header-content {
@@ -103,6 +110,13 @@
       background: #45a049;
     }
 
+    .main-content {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
     .chat-container {
       flex: 1;
       max-width: 1200px;
@@ -112,6 +126,11 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      transition: margin-right 0.3s ease;
+    }
+
+    .chat-container.sidebar-open {
+      margin-right: 400px;
     }
 
     .chat-messages {
@@ -297,6 +316,133 @@
       align-self: flex-start;
     }
 
+    .sidebar {
+      position: fixed;
+      right: calc(var(--sidebar-width) * -1);
+      top: var(--header-height);
+      width: var(--sidebar-width);
+      height: calc(100vh - var(--header-height));
+      background: white;
+      box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+      transition: right 0.3s ease;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar.open {
+      right: 0;
+    }
+
+    .sidebar-header {
+      padding: 15px 20px;
+      border-bottom: 2px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f5f5f5;
+    }
+
+    .sidebar-header h2 {
+      color: #333;
+      font-size: 1.2em;
+      margin: 0;
+    }
+
+    .sidebar-close {
+      background: transparent;
+      color: #666;
+      padding: 4px 8px;
+      font-size: 20px;
+      border: none;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .sidebar-close:hover {
+      color: #333;
+      background: #e0e0e0;
+    }
+
+    .debug-log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 15px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+
+    .debug-entry {
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      border-left: 3px solid;
+      background: rgba(255, 255, 255, 0.05);
+      word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+
+    .debug-entry.user-message {
+      border-left-color: #667eea;
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    .debug-entry.ai-thinking {
+      border-left-color: #ffc107;
+      background: rgba(255, 193, 7, 0.1);
+    }
+
+    .debug-entry.tool-call {
+      border-left-color: #4caf50;
+      background: rgba(76, 175, 80, 0.1);
+    }
+
+    .debug-entry.ai-message {
+      border-left-color: #2196f3;
+      background: rgba(33, 150, 243, 0.1);
+    }
+
+    .debug-entry.error {
+      border-left-color: #f44336;
+      background: rgba(244, 67, 54, 0.1);
+    }
+
+    .debug-entry.system {
+      border-left-color: #9e9e9e;
+      background: rgba(158, 158, 158, 0.1);
+    }
+
+    .debug-entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      opacity: 0.8;
+    }
+
+    .debug-entry-time {
+      font-size: 10px;
+      opacity: 0.6;
+    }
+
+    .debug-entry-content {
+      margin-top: 4px;
+    }
+
+    .debug-toggle-btn {
+      background: #9e9e9e;
+    }
+
+    .debug-toggle-btn:hover {
+      background: #757575;
+    }
+
     @media (max-width: 768px) {
       .message {
         max-width: 85%;
@@ -315,6 +461,19 @@
         flex: 1;
         text-align: center;
       }
+
+      .sidebar {
+        width: 100%;
+        right: -100%;
+      }
+
+      .sidebar.open {
+        right: 0;
+      }
+
+      .chat-container.sidebar-open {
+        margin-right: 0;
+      }
     }
   </style>
 </head>
@@ -330,15 +489,22 @@
           <div id="wakeUpStatus" class="status-item disconnected">AI: Sleeping</div>
         </div>
         <button id="wakeUpBtn" onclick="toggleWakeUp()">Wake Up</button>
+        <button id="debugToggleBtn" class="debug-toggle-btn" onclick="toggleDebugSidebar()">Debug</button>
       </div>
     </div>
   </div>
 
-  <div class="chat-container">
-    <div class="chat-messages" id="chatMessages"></div>
-    <div class="chat-footer">
-      <input type="text" id="promptInput" class="chat-input" placeholder="Type your message..." />
-      <button id="sendBtn" class="send-button" onclick="sendPrompt()">Send</button>
+  <div class="sidebar" id="debugSidebar">
+    <div class="debug-log" id="debugLog"></div>
+  </div>
+
+  <div class="main-content">
+    <div class="chat-container" id="chatContainer">
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-footer">
+        <input type="text" id="promptInput" class="chat-input" placeholder="Type your message..." />
+        <button id="sendBtn" class="send-button" onclick="sendPrompt()">Send</button>
+      </div>
     </div>
   </div>
 
@@ -349,6 +515,76 @@
     let isAwake = false;
     let currentThinkingIndicator = null;
     let currentAIMessage = null;
+    let debugLogEntries = [];
+    let currentThoughtEntry = null;
+
+    function toggleDebugSidebar() {
+      const sidebar = document.getElementById('debugSidebar');
+      const chatContainer = document.getElementById('chatContainer');
+      sidebar.classList.toggle('open');
+      chatContainer.classList.toggle('sidebar-open');
+    }
+
+    function addDebugLogEntry(type, content, metadata = {}) {
+      const debugLog = document.getElementById('debugLog');
+
+      // For thought chunks, accumulate in the same entry
+      if (type === 'ai-thinking' && metadata.chunk && currentThoughtEntry) {
+        const contentDiv = currentThoughtEntry.querySelector('.debug-entry-content');
+        const currentContent = contentDiv.textContent;
+        contentDiv.textContent = currentContent + content;
+        debugLog.scrollTop = debugLog.scrollHeight;
+        return;
+      }
+
+      // Create new entry
+      const entry = document.createElement('div');
+      entry.className = `debug-entry ${type}`;
+
+      const timestamp = new Date().toLocaleTimeString();
+      const header = document.createElement('div');
+      header.className = 'debug-entry-header';
+
+      const typeLabel = document.createElement('span');
+      typeLabel.textContent = type.replace(/-/g, ' ').toUpperCase();
+
+      const timeLabel = document.createElement('span');
+      timeLabel.className = 'debug-entry-time';
+      timeLabel.textContent = timestamp;
+
+      header.appendChild(typeLabel);
+      header.appendChild(timeLabel);
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'debug-entry-content';
+
+      if (typeof content === 'object') {
+        contentDiv.textContent = JSON.stringify(content, null, 2);
+      } else {
+        contentDiv.textContent = content;
+      }
+
+      entry.appendChild(header);
+      entry.appendChild(contentDiv);
+
+      debugLog.appendChild(entry);
+      debugLog.scrollTop = debugLog.scrollHeight;
+
+      // Store entry reference for thought chunks
+      if (type === 'ai-thinking' && !metadata.chunk) {
+        currentThoughtEntry = entry;
+      } else {
+        currentThoughtEntry = null;
+      }
+
+      // Store entry for persistence
+      debugLogEntries.push({
+        type,
+        content: typeof content === 'object' ? JSON.stringify(content, null, 2) : content,
+        timestamp,
+        metadata
+      });
+    }
 
     function addMessage(text, isUser, timestamp = null) {
       const messagesContainer = document.getElementById('chatMessages');
@@ -437,14 +673,17 @@
       thoughtsWS.onopen = () => {
         document.getElementById('thoughtsStatus').textContent = 'Thoughts: Connected';
         document.getElementById('thoughtsStatus').className = 'status-item connected';
+        addDebugLogEntry('system', 'Thoughts WebSocket connected');
       };
 
       thoughtsWS.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === 'thought') {
           // Thoughts are now shown via wakeup WebSocket
+          addDebugLogEntry('ai-thinking', data.content, { done: data.done });
         } else if (data.type === 'error') {
           showError(data.message);
+          addDebugLogEntry('error', data.message);
         }
       };
 
@@ -465,6 +704,7 @@
       outputsWS.onopen = () => {
         document.getElementById('outputsStatus').textContent = 'Outputs: Connected';
         document.getElementById('outputsStatus').className = 'status-item connected';
+        addDebugLogEntry('system', 'Outputs WebSocket connected');
       };
 
       outputsWS.onmessage = (event) => {
@@ -474,10 +714,12 @@
           hideThinkingIndicator();
           const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : null;
           addMessage(data.content, false, timestamp);
+          addDebugLogEntry('ai-message', data.content, { timestamp: data.timestamp });
           currentAIMessage = null;
         } else if (data.type === 'error') {
           hideThinkingIndicator();
           showError(data.message);
+          addDebugLogEntry('error', data.message);
         }
       };
 
@@ -498,6 +740,7 @@
       wakeUpWS.onopen = () => {
         document.getElementById('wakeUpStatus').textContent = 'AI: Connected';
         document.getElementById('wakeUpStatus').className = 'status-item connected';
+        addDebugLogEntry('system', 'Wake Up WebSocket connected');
       };
 
       wakeUpWS.onmessage = (event) => {
@@ -507,30 +750,41 @@
           const statusEl = document.getElementById('wakeUpStatus');
           statusEl.textContent = `AI: ${data.message}`;
           statusEl.className = 'status-item connected';
+          addDebugLogEntry('system', `Status: ${data.message}`, { timestamp: data.timestamp });
         } else if (data.type === 'invocation') {
           const statusEl = document.getElementById('wakeUpStatus');
           statusEl.textContent = `AI: Thinking (${new Date(data.timestamp).toLocaleTimeString()})`;
           statusEl.className = 'status-item connected';
           showThinkingIndicator();
+          addDebugLogEntry('system', 'LLM invocation started', { timestamp: data.timestamp });
         } else if (data.type === 'thought_start') {
           // New thought starting
           currentAIMessage = null;
           hideThinkingIndicator();
+          currentThoughtEntry = null; // Reset thought entry
+          addDebugLogEntry('ai-thinking', '', { timestamp: data.timestamp });
         } else if (data.type === 'thought_chunk') {
           // Stream thought chunks - show as thinking process
           hideThinkingIndicator();
           const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : null;
           updateAIMessage(data.content, timestamp);
+          addDebugLogEntry('ai-thinking', data.content, { timestamp: data.timestamp, chunk: true });
         } else if (data.type === 'tool_call') {
           const statusEl = document.getElementById('wakeUpStatus');
           statusEl.textContent = `AI: Sent message (${new Date(data.timestamp).toLocaleTimeString()})`;
           statusEl.className = 'status-item connected';
           hideThinkingIndicator();
+          currentThoughtEntry = null; // Reset thought entry after tool call
+          addDebugLogEntry('tool-call', {
+            tool: data.tool,
+            message: data.message
+          }, { timestamp: data.timestamp });
         } else if (data.type === 'error') {
           document.getElementById('wakeUpStatus').textContent = 'AI: Error';
           document.getElementById('wakeUpStatus').className = 'status-item disconnected';
           hideThinkingIndicator();
           showError(data.message);
+          addDebugLogEntry('error', data.message, { timestamp: data.timestamp });
         }
       };
 
@@ -552,6 +806,9 @@
 
       // Add user message to chat
       addMessage(prompt, true);
+
+      // Log to debug
+      addDebugLogEntry('user-message', prompt);
 
       // Send to WebSockets if needed (for legacy support)
       if (thoughtsWS && thoughtsWS.readyState === WebSocket.OPEN) {
@@ -579,11 +836,13 @@
         btn.textContent = 'Sleep';
         btn.classList.add('active');
         wakeUpWS.send(JSON.stringify({ type: 'wake_up' }));
+        addDebugLogEntry('system', 'AI wake up command sent');
       } else {
         isAwake = false;
         btn.textContent = 'Wake Up';
         btn.classList.remove('active');
         wakeUpWS.send(JSON.stringify({ type: 'sleep' }));
+        addDebugLogEntry('system', 'AI sleep command sent');
       }
     }
 
@@ -598,5 +857,7 @@
     connectWebSockets();
   </script>
 </body>
+
+</html>
 
 </html>
