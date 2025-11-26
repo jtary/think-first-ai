@@ -86,6 +86,14 @@
       margin-top: 10px;
     }
 
+    button.active {
+      background: #4caf50;
+    }
+
+    button.active:hover {
+      background: #45a049;
+    }
+
     .status-item {
       flex: 1;
       padding: 10px;
@@ -172,10 +180,12 @@
       <div class="input-group">
         <input type="text" id="promptInput" placeholder="Enter your prompt here..." />
         <button id="sendBtn" onclick="sendPrompt()">Send</button>
+        <button id="wakeUpBtn" onclick="toggleWakeUp()">Wake Up</button>
       </div>
       <div class="status">
         <div id="thoughtsStatus" class="status-item disconnected">Thoughts: Disconnected</div>
         <div id="outputsStatus" class="status-item disconnected">Outputs: Disconnected</div>
+        <div id="wakeUpStatus" class="status-item disconnected">AI: Sleeping</div>
       </div>
     </div>
 
@@ -194,8 +204,10 @@
   <script>
     let thoughtsWS = null;
     let outputsWS = null;
+    let wakeUpWS = null;
     let thoughtsContent = '';
     let outputsContent = '';
+    let isAwake = false;
 
     function connectWebSockets() {
       // Connect to thoughts WebSocket
@@ -248,6 +260,11 @@
           if (data.done) {
             outputsContent = '';
           }
+        } else if (data.type === 'user_message') {
+          // Message from AI via tool call
+          const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : '';
+          outputsContent += `[${timestamp}] ${data.content}\n\n`;
+          document.getElementById('outputsContent').textContent = outputsContent;
         } else if (data.type === 'error') {
           document.getElementById('outputsContent').innerHTML =
             `<div class="error">Error: ${data.message}</div>`;
@@ -262,6 +279,58 @@
       outputsWS.onclose = () => {
         document.getElementById('outputsStatus').textContent = 'Outputs: Disconnected';
         document.getElementById('outputsStatus').className = 'status-item disconnected';
+        // Reconnect after 3 seconds
+        setTimeout(connectWebSockets, 3000);
+      };
+
+      // Connect to wake up WebSocket
+      wakeUpWS = new WebSocket('ws://localhost:8000/ws/wakeup');
+
+      wakeUpWS.onopen = () => {
+        document.getElementById('wakeUpStatus').textContent = 'AI: Connected';
+        document.getElementById('wakeUpStatus').className = 'status-item connected';
+      };
+
+      wakeUpWS.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'status') {
+          // Update status display
+          const statusEl = document.getElementById('wakeUpStatus');
+          statusEl.textContent = `AI: ${data.message}`;
+          statusEl.className = 'status-item connected';
+        } else if (data.type === 'invocation') {
+          // New LLM invocation started
+          const statusEl = document.getElementById('wakeUpStatus');
+          statusEl.textContent = `AI: Thinking (${new Date(data.timestamp).toLocaleTimeString()})`;
+          statusEl.className = 'status-item connected';
+        } else if (data.type === 'thought_start') {
+          // New thought starting, clear previous content
+          thoughtsContent = '';
+          document.getElementById('thoughtsContent').textContent = '';
+        } else if (data.type === 'thought_chunk') {
+          // Stream thought chunks to thoughts panel
+          thoughtsContent += data.content;
+          document.getElementById('thoughtsContent').textContent = thoughtsContent;
+        } else if (data.type === 'tool_call') {
+          // Tool was called
+          const statusEl = document.getElementById('wakeUpStatus');
+          statusEl.textContent = `AI: Sent message to user (${new Date(data.timestamp).toLocaleTimeString()})`;
+          statusEl.className = 'status-item connected';
+        } else if (data.type === 'error') {
+          document.getElementById('wakeUpStatus').textContent = 'AI: Error';
+          document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+        }
+      };
+
+      wakeUpWS.onerror = () => {
+        document.getElementById('wakeUpStatus').textContent = 'AI: Error';
+        document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+      };
+
+      wakeUpWS.onclose = () => {
+        document.getElementById('wakeUpStatus').textContent = 'AI: Disconnected';
+        document.getElementById('wakeUpStatus').className = 'status-item disconnected';
         // Reconnect after 3 seconds
         setTimeout(connectWebSockets, 3000);
       };
@@ -281,6 +350,29 @@
 
       // Clear input
       document.getElementById('promptInput').value = '';
+    }
+
+    function toggleWakeUp() {
+      if (!wakeUpWS || wakeUpWS.readyState !== WebSocket.OPEN) {
+        alert('Wake up WebSocket is not connected. Please wait for connection.');
+        return;
+      }
+
+      const btn = document.getElementById('wakeUpBtn');
+
+      if (!isAwake) {
+        // Wake up
+        isAwake = true;
+        btn.textContent = 'Sleep';
+        btn.classList.add('active');
+        wakeUpWS.send(JSON.stringify({ type: 'wake_up' }));
+      } else {
+        // Sleep
+        isAwake = false;
+        btn.textContent = 'Wake Up';
+        btn.classList.remove('active');
+        wakeUpWS.send(JSON.stringify({ type: 'sleep' }));
+      }
     }
 
     // Allow Enter key to send
