@@ -20,10 +20,12 @@
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
+      height: 100vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      margin: 0;
+      padding: 0;
     }
 
     .header {
@@ -57,28 +59,28 @@
       flex-wrap: wrap;
     }
 
-    .status-group {
+    .status-indicator {
       display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .status-item {
-      padding: 8px 12px;
-      border-radius: 5px;
+      align-items: center;
+      gap: 6px;
       font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
+      color: #666;
     }
 
-    .status-item.connected {
-      background: #4caf50;
-      color: white;
-    }
-
-    .status-item.disconnected {
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
       background: #f44336;
-      color: white;
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected {
+      background: #4caf50;
+    }
+
+    .status-dot.disconnected {
+      background: #f44336;
     }
 
     button {
@@ -110,23 +112,38 @@
       background: #45a049;
     }
 
+    .play-pause-btn {
+      min-width: 80px;
+    }
+
+    .play-pause-btn.paused {
+      background: #9e9e9e;
+    }
+
+    .play-pause-btn.paused:hover {
+      background: #757575;
+    }
+
     .main-content {
       flex: 1;
       display: flex;
       overflow: hidden;
       position: relative;
+      min-height: 0;
     }
 
     .chat-container {
       flex: 1;
       max-width: 1200px;
+      max-height: 100%;
       width: 100%;
-      margin: 20px auto;
-      padding: 0 20px;
+      margin: 0 auto;
+      padding: 20px;
       display: flex;
       flex-direction: column;
       overflow: hidden;
       transition: margin-right 0.3s ease;
+      min-height: 0;
     }
 
     .chat-container.sidebar-open {
@@ -139,11 +156,13 @@
       border-radius: 10px;
       padding: 20px;
       overflow-y: auto;
+      overflow-x: hidden;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       display: flex;
       flex-direction: column;
       gap: 15px;
       min-height: 0;
+      max-height: 100%;
     }
 
     .message {
@@ -267,6 +286,7 @@
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       display: flex;
       gap: 10px;
+      flex-shrink: 0;
     }
 
     .chat-input {
@@ -453,15 +473,6 @@
         align-items: flex-start;
       }
 
-      .status-group {
-        width: 100%;
-      }
-
-      .status-item {
-        flex: 1;
-        text-align: center;
-      }
-
       .sidebar {
         width: 100%;
         right: -100%;
@@ -483,11 +494,11 @@
     <div class="header-content">
       <h1>🧠 Think First AI</h1>
       <div class="header-controls">
-        <div class="status-group">
-          <div id="wakeUpStatus" class="status-item disconnected">Chat: Disconnected</div>
-          <div id="thoughtsStatus" class="status-item disconnected">Debug: Disconnected</div>
+        <div class="status-indicator">
+          <span class="status-dot disconnected" id="statusDot"></span>
+          <span id="statusText">Disconnected</span>
         </div>
-        <button id="wakeUpBtn" onclick="toggleWakeUp()">Wake Up</button>
+        <button id="playPauseBtn" class="play-pause-btn" onclick="togglePlayPause()">▶ Play</button>
         <button id="debugToggleBtn" class="debug-toggle-btn" onclick="toggleDebugSidebar()">Debug</button>
       </div>
     </div>
@@ -664,22 +675,38 @@
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
+    function updateStatus(connected, text) {
+      const statusDot = document.getElementById('statusDot');
+      const statusText = document.getElementById('statusText');
+      if (connected) {
+        statusDot.className = 'status-dot connected';
+        statusText.textContent = text || 'Connected';
+      } else {
+        statusDot.className = 'status-dot disconnected';
+        statusText.textContent = text || 'Disconnected';
+      }
+    }
+
     function connectWebSockets() {
       // Connect to chat WebSocket
       chatWS = new WebSocket('ws://localhost:8000/ws/chat');
 
       chatWS.onopen = () => {
-        document.getElementById('wakeUpStatus').textContent = 'Chat: Connected';
-        document.getElementById('wakeUpStatus').className = 'status-item connected';
+        updateStatus(true, 'Chat connected');
       };
 
       chatWS.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
         if (data.type === 'status') {
-          const statusEl = document.getElementById('wakeUpStatus');
-          statusEl.textContent = `AI: ${data.message}`;
-          statusEl.className = 'status-item connected';
+          // Update status text based on message
+          if (data.message.includes('waking up')) {
+            updateStatus(true, 'Starting...');
+          } else if (data.message.includes('sleep')) {
+            updateStatus(true, 'Paused');
+          } else {
+            updateStatus(true, 'Connected');
+          }
         } else if (data.type === 'ai_message') {
           // Message from AI via tool call - only actual messages go to chat
           hideThinkingIndicator();
@@ -687,21 +714,18 @@
           addMessage(data.content, false, timestamp);
           currentAIMessage = null;
         } else if (data.type === 'error') {
-          document.getElementById('wakeUpStatus').textContent = 'AI: Error';
-          document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+          updateStatus(false, 'Error');
           hideThinkingIndicator();
           showError(data.message);
         }
       };
 
       chatWS.onerror = () => {
-        document.getElementById('wakeUpStatus').textContent = 'Chat: Error';
-        document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+        updateStatus(false, 'Chat error');
       };
 
       chatWS.onclose = () => {
-        document.getElementById('wakeUpStatus').textContent = 'Chat: Disconnected';
-        document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+        updateStatus(false, 'Disconnected');
         setTimeout(connectWebSockets, 3000);
       };
 
@@ -709,8 +733,10 @@
       debugWS = new WebSocket('ws://localhost:8000/ws/debug');
 
       debugWS.onopen = () => {
-        document.getElementById('thoughtsStatus').textContent = 'Debug: Connected';
-        document.getElementById('thoughtsStatus').className = 'status-item connected';
+        // Update status if chat is also connected
+        if (chatWS && chatWS.readyState === WebSocket.OPEN) {
+          updateStatus(true, 'Connected');
+        }
         addDebugLogEntry('system', 'Debug WebSocket connected');
       };
 
@@ -738,13 +764,10 @@
       };
 
       debugWS.onerror = () => {
-        document.getElementById('thoughtsStatus').textContent = 'Debug: Error';
-        document.getElementById('thoughtsStatus').className = 'status-item disconnected';
+        // Status will be updated based on chat connection
       };
 
       debugWS.onclose = () => {
-        document.getElementById('thoughtsStatus').textContent = 'Debug: Disconnected';
-        document.getElementById('thoughtsStatus').className = 'status-item disconnected';
         setTimeout(connectWebSockets, 3000);
       };
     }
@@ -775,26 +798,30 @@
       document.getElementById('promptInput').value = '';
     }
 
-    function toggleWakeUp() {
+    function togglePlayPause() {
       if (!chatWS || chatWS.readyState !== WebSocket.OPEN) {
         alert('Chat WebSocket is not connected. Please wait for connection.');
         return;
       }
 
-      const btn = document.getElementById('wakeUpBtn');
+      const btn = document.getElementById('playPauseBtn');
 
       if (!isAwake) {
+        // Play - wake up the AI
         isAwake = true;
-        btn.textContent = 'Sleep';
+        btn.textContent = '⏸ Pause';
+        btn.classList.remove('paused');
         btn.classList.add('active');
         chatWS.send(JSON.stringify({ type: 'wake_up' }));
-        addDebugLogEntry('system', 'AI wake up command sent');
+        addDebugLogEntry('system', 'AI play command sent');
       } else {
+        // Pause - put AI to sleep
         isAwake = false;
-        btn.textContent = 'Wake Up';
+        btn.textContent = '▶ Play';
         btn.classList.remove('active');
+        btn.classList.add('paused');
         chatWS.send(JSON.stringify({ type: 'sleep' }));
-        addDebugLogEntry('system', 'AI sleep command sent');
+        addDebugLogEntry('system', 'AI pause command sent');
       }
     }
 
