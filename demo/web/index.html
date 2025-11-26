@@ -16,57 +16,72 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
-      padding: 20px;
+      display: flex;
+      flex-direction: column;
     }
 
-    .container {
+    .header {
+      background: white;
+      padding: 15px 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      z-index: 10;
+    }
+
+    .header-content {
       max-width: 1200px;
       margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
     }
 
     h1 {
-      color: white;
-      text-align: center;
-      margin-bottom: 30px;
-      font-size: 2.5em;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+      color: #667eea;
+      font-size: 1.5em;
+      margin: 0;
     }
 
-    .controls {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    .header-controls {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      flex-wrap: wrap;
     }
 
-    .input-group {
+    .status-group {
       display: flex;
       gap: 10px;
-      margin-bottom: 15px;
+      flex-wrap: wrap;
     }
 
-    input[type="text"] {
-      flex: 1;
-      padding: 12px;
-      border: 2px solid #e0e0e0;
+    .status-item {
+      padding: 8px 12px;
       border-radius: 5px;
-      font-size: 16px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
     }
 
-    input[type="text"]:focus {
-      outline: none;
-      border-color: #667eea;
+    .status-item.connected {
+      background: #4caf50;
+      color: white;
+    }
+
+    .status-item.disconnected {
+      background: #f44336;
+      color: white;
     }
 
     button {
-      padding: 12px 24px;
+      padding: 8px 16px;
       background: #667eea;
       color: white;
       border: none;
       border-radius: 5px;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
       transition: background 0.3s;
     }
@@ -80,12 +95,6 @@
       cursor: not-allowed;
     }
 
-    .status {
-      display: flex;
-      gap: 20px;
-      margin-top: 10px;
-    }
-
     button.active {
       background: #4caf50;
     }
@@ -94,110 +103,242 @@
       background: #45a049;
     }
 
-    .status-item {
+    .chat-container {
       flex: 1;
-      padding: 10px;
-      border-radius: 5px;
-      text-align: center;
-      font-weight: 600;
+      max-width: 1200px;
+      width: 100%;
+      margin: 20px auto;
+      padding: 0 20px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
-    .status-item.connected {
-      background: #4caf50;
-      color: white;
-    }
-
-    .status-item.disconnected {
-      background: #f44336;
-      color: white;
-    }
-
-    .panels {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-    }
-
-    .panel {
+    .chat-messages {
+      flex: 1;
       background: white;
       border-radius: 10px;
       padding: 20px;
+      overflow-y: auto;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       display: flex;
       flex-direction: column;
+      gap: 15px;
+      min-height: 0;
     }
 
-    .panel h2 {
-      color: #333;
-      margin-bottom: 15px;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #e0e0e0;
+    .message {
+      display: flex;
+      max-width: 70%;
+      animation: fadeIn 0.3s ease-in;
     }
 
-    .panel-content {
-      flex: 1;
-      overflow-y: auto;
-      max-height: 500px;
-      padding: 10px;
-      background: #f9f9f9;
-      border-radius: 5px;
-      font-family: 'Courier New', monospace;
-      font-size: 14px;
-      line-height: 1.6;
-      white-space: pre-wrap;
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .message.user {
+      align-self: flex-end;
+      justify-content: flex-end;
+    }
+
+    .message.ai {
+      align-self: flex-start;
+      justify-content: flex-start;
+    }
+
+    .message-bubble {
+      padding: 12px 16px;
+      border-radius: 18px;
       word-wrap: break-word;
+      white-space: pre-wrap;
+      line-height: 1.4;
     }
 
-    .thoughts-panel .panel-content {
-      color: #667eea;
+    .message.user .message-bubble {
+      background: #667eea;
+      color: white;
+      border-bottom-right-radius: 4px;
     }
 
-    .outputs-panel .panel-content {
-      color: #764ba2;
+    .message.ai .message-bubble {
+      background: #f0f0f0;
+      color: #333;
+      border-bottom-left-radius: 4px;
     }
 
-    .error {
-      color: #f44336;
+    .message-time {
+      font-size: 11px;
+      color: #999;
+      margin-top: 4px;
+      padding: 0 4px;
+    }
+
+    .message.user .message-time {
+      text-align: right;
+    }
+
+    .message.ai .message-time {
+      text-align: left;
+    }
+
+    .thinking-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #fff3cd;
+      border-radius: 18px;
+      border-bottom-left-radius: 4px;
+      color: #856404;
+      font-size: 14px;
+      max-width: 70%;
+      align-self: flex-start;
+    }
+
+    .thinking-dots {
+      display: inline-flex;
+      gap: 4px;
+    }
+
+    .thinking-dots span {
+      width: 6px;
+      height: 6px;
+      background: #856404;
+      border-radius: 50%;
+      animation: thinking 1.4s infinite;
+    }
+
+    .thinking-dots span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .thinking-dots span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes thinking {
+
+      0%,
+      60%,
+      100% {
+        opacity: 0.3;
+        transform: scale(0.8);
+      }
+
+      30% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .chat-footer {
+      background: white;
+      padding: 15px 20px;
+      border-radius: 10px;
+      margin-top: 15px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      display: flex;
+      gap: 10px;
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 25px;
+      font-size: 16px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    .chat-input:focus {
+      border-color: #667eea;
+    }
+
+    .send-button {
+      padding: 12px 24px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      transition: background 0.3s;
+      min-width: 80px;
+    }
+
+    .send-button:hover {
+      background: #5568d3;
+    }
+
+    .send-button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    .error-message {
       background: #ffebee;
-      padding: 10px;
-      border-radius: 5px;
-      margin-top: 10px;
+      color: #c62828;
+      padding: 12px 16px;
+      border-radius: 18px;
+      border-bottom-left-radius: 4px;
+      max-width: 70%;
+      align-self: flex-start;
     }
 
     @media (max-width: 768px) {
-      .panels {
-        grid-template-columns: 1fr;
+      .message {
+        max-width: 85%;
+      }
+
+      .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .status-group {
+        width: 100%;
+      }
+
+      .status-item {
+        flex: 1;
+        text-align: center;
       }
     }
   </style>
 </head>
 
 <body>
-  <div class="container">
-    <h1>🧠 Think First AI</h1>
-
-    <div class="controls">
-      <div class="input-group">
-        <input type="text" id="promptInput" placeholder="Enter your prompt here..." />
-        <button id="sendBtn" onclick="sendPrompt()">Send</button>
+  <div class="header">
+    <div class="header-content">
+      <h1>🧠 Think First AI</h1>
+      <div class="header-controls">
+        <div class="status-group">
+          <div id="thoughtsStatus" class="status-item disconnected">Thoughts: Disconnected</div>
+          <div id="outputsStatus" class="status-item disconnected">Outputs: Disconnected</div>
+          <div id="wakeUpStatus" class="status-item disconnected">AI: Sleeping</div>
+        </div>
         <button id="wakeUpBtn" onclick="toggleWakeUp()">Wake Up</button>
       </div>
-      <div class="status">
-        <div id="thoughtsStatus" class="status-item disconnected">Thoughts: Disconnected</div>
-        <div id="outputsStatus" class="status-item disconnected">Outputs: Disconnected</div>
-        <div id="wakeUpStatus" class="status-item disconnected">AI: Sleeping</div>
-      </div>
     </div>
+  </div>
 
-    <div class="panels">
-      <div class="panel thoughts-panel">
-        <h2>💭 Thoughts</h2>
-        <div id="thoughtsContent" class="panel-content"></div>
-      </div>
-      <div class="panel outputs-panel">
-        <h2>📤 Outputs</h2>
-        <div id="outputsContent" class="panel-content"></div>
-      </div>
+  <div class="chat-container">
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-footer">
+      <input type="text" id="promptInput" class="chat-input" placeholder="Type your message..." />
+      <button id="sendBtn" class="send-button" onclick="sendPrompt()">Send</button>
     </div>
   </div>
 
@@ -205,9 +346,89 @@
     let thoughtsWS = null;
     let outputsWS = null;
     let wakeUpWS = null;
-    let thoughtsContent = '';
-    let outputsContent = '';
     let isAwake = false;
+    let currentThinkingIndicator = null;
+    let currentAIMessage = null;
+
+    function addMessage(text, isUser, timestamp = null) {
+      const messagesContainer = document.getElementById('chatMessages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${isUser ? 'user' : 'ai'}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.textContent = text;
+
+      const timeDiv = document.createElement('div');
+      timeDiv.className = 'message-time';
+      timeDiv.textContent = timestamp || new Date().toLocaleTimeString();
+
+      messageDiv.appendChild(bubble);
+      messageDiv.appendChild(timeDiv);
+      messagesContainer.appendChild(messageDiv);
+
+      // Scroll to bottom
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+      return messageDiv;
+    }
+
+    function showThinkingIndicator() {
+      const messagesContainer = document.getElementById('chatMessages');
+
+      // Remove existing thinking indicator if any
+      if (currentThinkingIndicator) {
+        currentThinkingIndicator.remove();
+      }
+
+      const thinkingDiv = document.createElement('div');
+      thinkingDiv.className = 'thinking-indicator';
+      thinkingDiv.id = 'thinkingIndicator';
+      thinkingDiv.innerHTML = `
+        <span>AI is thinking</span>
+        <div class="thinking-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      `;
+
+      messagesContainer.appendChild(thinkingDiv);
+      currentThinkingIndicator = thinkingDiv;
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function hideThinkingIndicator() {
+      if (currentThinkingIndicator) {
+        currentThinkingIndicator.remove();
+        currentThinkingIndicator = null;
+      }
+    }
+
+    function updateAIMessage(text, timestamp = null) {
+      if (!currentAIMessage) {
+        currentAIMessage = addMessage(text, false, timestamp);
+      } else {
+        const bubble = currentAIMessage.querySelector('.message-bubble');
+        bubble.textContent = text;
+        if (timestamp) {
+          const timeDiv = currentAIMessage.querySelector('.message-time');
+          timeDiv.textContent = timestamp;
+        }
+        // Scroll to bottom
+        document.getElementById('chatMessages').scrollTop =
+          document.getElementById('chatMessages').scrollHeight;
+      }
+    }
+
+    function showError(message) {
+      const messagesContainer = document.getElementById('chatMessages');
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error-message';
+      errorDiv.textContent = `Error: ${message}`;
+      messagesContainer.appendChild(errorDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
 
     function connectWebSockets() {
       // Connect to thoughts WebSocket
@@ -221,14 +442,9 @@
       thoughtsWS.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === 'thought') {
-          thoughtsContent += data.content;
-          document.getElementById('thoughtsContent').textContent = thoughtsContent;
-          if (data.done) {
-            thoughtsContent = '';
-          }
+          // Thoughts are now shown via wakeup WebSocket
         } else if (data.type === 'error') {
-          document.getElementById('thoughtsContent').innerHTML =
-            `<div class="error">Error: ${data.message}</div>`;
+          showError(data.message);
         }
       };
 
@@ -240,7 +456,6 @@
       thoughtsWS.onclose = () => {
         document.getElementById('thoughtsStatus').textContent = 'Thoughts: Disconnected';
         document.getElementById('thoughtsStatus').className = 'status-item disconnected';
-        // Reconnect after 3 seconds
         setTimeout(connectWebSockets, 3000);
       };
 
@@ -254,20 +469,15 @@
 
       outputsWS.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        if (data.type === 'output') {
-          outputsContent += data.content;
-          document.getElementById('outputsContent').textContent = outputsContent;
-          if (data.done) {
-            outputsContent = '';
-          }
-        } else if (data.type === 'user_message') {
+        if (data.type === 'user_message') {
           // Message from AI via tool call
-          const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : '';
-          outputsContent += `[${timestamp}] ${data.content}\n\n`;
-          document.getElementById('outputsContent').textContent = outputsContent;
+          hideThinkingIndicator();
+          const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : null;
+          addMessage(data.content, false, timestamp);
+          currentAIMessage = null;
         } else if (data.type === 'error') {
-          document.getElementById('outputsContent').innerHTML =
-            `<div class="error">Error: ${data.message}</div>`;
+          hideThinkingIndicator();
+          showError(data.message);
         }
       };
 
@@ -279,7 +489,6 @@
       outputsWS.onclose = () => {
         document.getElementById('outputsStatus').textContent = 'Outputs: Disconnected';
         document.getElementById('outputsStatus').className = 'status-item disconnected';
-        // Reconnect after 3 seconds
         setTimeout(connectWebSockets, 3000);
       };
 
@@ -295,31 +504,33 @@
         const data = JSON.parse(event.data);
 
         if (data.type === 'status') {
-          // Update status display
           const statusEl = document.getElementById('wakeUpStatus');
           statusEl.textContent = `AI: ${data.message}`;
           statusEl.className = 'status-item connected';
         } else if (data.type === 'invocation') {
-          // New LLM invocation started
           const statusEl = document.getElementById('wakeUpStatus');
           statusEl.textContent = `AI: Thinking (${new Date(data.timestamp).toLocaleTimeString()})`;
           statusEl.className = 'status-item connected';
+          showThinkingIndicator();
         } else if (data.type === 'thought_start') {
-          // New thought starting, clear previous content
-          thoughtsContent = '';
-          document.getElementById('thoughtsContent').textContent = '';
+          // New thought starting
+          currentAIMessage = null;
+          hideThinkingIndicator();
         } else if (data.type === 'thought_chunk') {
-          // Stream thought chunks to thoughts panel
-          thoughtsContent += data.content;
-          document.getElementById('thoughtsContent').textContent = thoughtsContent;
+          // Stream thought chunks - show as thinking process
+          hideThinkingIndicator();
+          const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : null;
+          updateAIMessage(data.content, timestamp);
         } else if (data.type === 'tool_call') {
-          // Tool was called
           const statusEl = document.getElementById('wakeUpStatus');
-          statusEl.textContent = `AI: Sent message to user (${new Date(data.timestamp).toLocaleTimeString()})`;
+          statusEl.textContent = `AI: Sent message (${new Date(data.timestamp).toLocaleTimeString()})`;
           statusEl.className = 'status-item connected';
+          hideThinkingIndicator();
         } else if (data.type === 'error') {
           document.getElementById('wakeUpStatus').textContent = 'AI: Error';
           document.getElementById('wakeUpStatus').className = 'status-item disconnected';
+          hideThinkingIndicator();
+          showError(data.message);
         }
       };
 
@@ -331,7 +542,6 @@
       wakeUpWS.onclose = () => {
         document.getElementById('wakeUpStatus').textContent = 'AI: Disconnected';
         document.getElementById('wakeUpStatus').className = 'status-item disconnected';
-        // Reconnect after 3 seconds
         setTimeout(connectWebSockets, 3000);
       };
     }
@@ -340,6 +550,10 @@
       const prompt = document.getElementById('promptInput').value.trim();
       if (!prompt) return;
 
+      // Add user message to chat
+      addMessage(prompt, true);
+
+      // Send to WebSockets if needed (for legacy support)
       if (thoughtsWS && thoughtsWS.readyState === WebSocket.OPEN) {
         thoughtsWS.send(JSON.stringify({ type: 'generate', prompt }));
       }
@@ -361,13 +575,11 @@
       const btn = document.getElementById('wakeUpBtn');
 
       if (!isAwake) {
-        // Wake up
         isAwake = true;
         btn.textContent = 'Sleep';
         btn.classList.add('active');
         wakeUpWS.send(JSON.stringify({ type: 'wake_up' }));
       } else {
-        // Sleep
         isAwake = false;
         btn.textContent = 'Wake Up';
         btn.classList.remove('active');
