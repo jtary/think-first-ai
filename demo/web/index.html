@@ -287,6 +287,7 @@
       display: flex;
       gap: 10px;
       flex-shrink: 0;
+      position: relative;
     }
 
     .chat-input {
@@ -324,6 +325,97 @@
     .send-button:disabled {
       background: #ccc;
       cursor: not-allowed;
+    }
+
+    .tools-settings {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .gear-icon {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 20px;
+      padding: 8px;
+      color: #667eea;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background 0.3s;
+      width: 36px;
+      height: 36px;
+    }
+
+    .gear-icon:hover {
+      background: #f0f0f0;
+    }
+
+    .tools-dropdown {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      margin-bottom: 10px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      min-width: 220px;
+      padding: 12px;
+      display: none;
+      z-index: 1000;
+      border: 1px solid #e0e0e0;
+    }
+
+    .tools-dropdown.open {
+      display: block;
+    }
+
+    .tools-dropdown-header {
+      font-weight: 600;
+      font-size: 14px;
+      color: #333;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .tool-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      cursor: pointer;
+    }
+
+    .tool-item:hover {
+      background: #f5f5f5;
+      margin: 0 -12px;
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+
+    .tool-item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #667eea;
+    }
+
+    .tool-item label {
+      cursor: pointer;
+      font-size: 14px;
+      color: #333;
+      flex: 1;
+      user-select: none;
+    }
+
+    .tool-description {
+      font-size: 12px;
+      color: #666;
+      margin-top: 2px;
     }
 
     .error-message {
@@ -512,6 +604,27 @@
     <div class="chat-container" id="chatContainer">
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-footer">
+        <div class="tools-settings">
+          <button class="gear-icon" onclick="toggleToolsDropdown()" title="Tool Settings">⚙️</button>
+          <div class="tools-dropdown" id="toolsDropdown">
+            <div class="tools-dropdown-header">Enable/Disable Tools</div>
+            <div class="tool-item">
+              <input type="checkbox" id="tool-send-message" checked
+                onchange="updateToolSetting('send_message_to_user', this.checked)">
+              <label for="tool-send-message">
+                Send Message to User
+                <div class="tool-description">Allow AI to send messages to the user</div>
+              </label>
+            </div>
+            <div class="tool-item">
+              <input type="checkbox" id="tool-wait" checked onchange="updateToolSetting('wait', this.checked)">
+              <label for="tool-wait">
+                Wait
+                <div class="tool-description">Allow AI to pause thinking for 10 seconds</div>
+              </label>
+            </div>
+          </div>
+        </div>
         <input type="text" id="promptInput" class="chat-input" placeholder="Type your message..." />
         <button id="sendBtn" class="send-button" onclick="sendPrompt()">Send</button>
       </div>
@@ -526,6 +639,10 @@
     let currentAIMessage = null;
     let debugLogEntries = [];
     let currentThoughtEntry = null;
+    let toolSettings = {
+      send_message_to_user: true,
+      wait: true
+    };
 
     function toggleDebugSidebar() {
       const sidebar = document.getElementById('debugSidebar');
@@ -533,6 +650,33 @@
       sidebar.classList.toggle('open');
       chatContainer.classList.toggle('sidebar-open');
     }
+
+    function toggleToolsDropdown() {
+      const dropdown = document.getElementById('toolsDropdown');
+      dropdown.classList.toggle('open');
+    }
+
+    function updateToolSetting(toolName, enabled) {
+      toolSettings[toolName] = enabled;
+
+      // Send tool configuration to backend
+      if (chatWS && chatWS.readyState === WebSocket.OPEN) {
+        chatWS.send(JSON.stringify({
+          type: 'tool_config',
+          tools: toolSettings
+        }));
+        addDebugLogEntry('system', `Tool configuration updated: ${toolName} = ${enabled}`);
+      }
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('toolsDropdown');
+      const gearIcon = document.querySelector('.gear-icon');
+      if (dropdown && gearIcon && !dropdown.contains(e.target) && !gearIcon.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
+    });
 
     function addDebugLogEntry(type, content, metadata = {}) {
       const debugLog = document.getElementById('debugLog');
@@ -595,6 +739,25 @@
       });
     }
 
+    function formatMessageText(text) {
+      // Escape HTML to prevent XSS attacks
+      const div = document.createElement('div');
+      div.textContent = text;
+      let escaped = div.innerHTML;
+
+      // Convert escape sequences to HTML
+      // Handle \n as line breaks
+      escaped = escaped.replace(/\\n/g, '<br>');
+      // Handle actual newlines (in case they're already in the text)
+      escaped = escaped.replace(/\n/g, '<br>');
+      // Handle \t as 4 spaces
+      escaped = escaped.replace(/\\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
+      // Handle actual tabs
+      escaped = escaped.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
+
+      return escaped;
+    }
+
     function addMessage(text, isUser, timestamp = null) {
       const messagesContainer = document.getElementById('chatMessages');
       const messageDiv = document.createElement('div');
@@ -602,7 +765,7 @@
 
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
-      bubble.textContent = text;
+      bubble.innerHTML = formatMessageText(text);
 
       const timeDiv = document.createElement('div');
       timeDiv.className = 'message-time';
@@ -655,7 +818,7 @@
         currentAIMessage = addMessage(text, false, timestamp);
       } else {
         const bubble = currentAIMessage.querySelector('.message-bubble');
-        bubble.textContent = text;
+        bubble.innerHTML = formatMessageText(text);
         if (timestamp) {
           const timeDiv = currentAIMessage.querySelector('.message-time');
           timeDiv.textContent = timestamp;

@@ -20,6 +20,7 @@ conversation_histories: Dict[WebSocket, List[Dict]] = {}
 wake_up_active: Dict[WebSocket, bool] = {}
 user_messages: Dict[WebSocket, List[Dict]] = {}
 thinking_interrupt: Dict[WebSocket, asyncio.Event] = {}
+tool_configs: Dict[WebSocket, Dict[str, bool]] = {}
 
 def resolve_directory(path: str) -> str:
     return os.path.join(os.path.dirname(__file__), path)
@@ -46,6 +47,11 @@ async def websocket_chat(websocket: WebSocket):
     user_messages[websocket] = []
     wake_up_active[websocket] = False
     thinking_interrupt[websocket] = asyncio.Event()
+    # Default tool configuration - all tools enabled by default
+    tool_configs[websocket] = {
+        "send_message_to_user": True,
+        "wait": True
+    }
     print(f"Chat WebSocket connected. Total connections: {len(chat_connections)}")
     
     try:
@@ -90,6 +96,15 @@ async def websocket_chat(websocket: WebSocket):
                 })
                 # Interrupt current thinking to process user message
                 thinking_interrupt[websocket].set()
+            elif message.get("type") == "tool_config":
+                # Update tool configuration
+                tools = message.get("tools", {})
+                tool_configs[websocket].update(tools)
+                await broadcast_to_debug({
+                    "type": "tool_config",
+                    "tools": tool_configs[websocket],
+                    "timestamp": datetime.now().isoformat()
+                })
             
     except WebSocketDisconnect:
         chat_connections.discard(websocket)
@@ -97,6 +112,7 @@ async def websocket_chat(websocket: WebSocket):
         user_messages.pop(websocket, None)
         wake_up_active.pop(websocket, None)
         thinking_interrupt.pop(websocket, None)
+        tool_configs.pop(websocket, None)
         print(f"Chat WebSocket disconnected. Total connections: {len(chat_connections)}")
 
 
@@ -154,15 +170,29 @@ async def wake_up_loop(websocket: WebSocket):
             # Get conversation history and user messages
             history = conversation_histories.get(websocket, [])
             user_msgs = user_messages.get(websocket, [])
+            tool_config = tool_configs.get(websocket, {"send_message_to_user": True, "wait": True})
             
             # Build the prompt with system instructions and history
-            system_prompt = """You are an AI that thinks before speaking. You have access to a tool to send messages to the user.
+            system_prompt = """You are an AI that thinks before speaking. You have access to tools to interact with the user.
 
-TOOL: send_message_to_user
+"""
+            
+            # Only include enabled tools in the prompt
+            if tool_config.get("send_message_to_user", True):
+                system_prompt += """TOOL: send_message_to_user
 Description: Use this tool to send a message to the user. This is the ONLY way to communicate with the user.
 Format: <tool_call>send_message_to_user("your message here")</tool_call>
 
-Your previous thoughts:
+"""
+            
+            if tool_config.get("wait", True):
+                system_prompt += """TOOL: wait
+Description: Use this tool to pause thinking for 10 seconds. This is useful when you need to wait before continuing your thought process.
+Format: <tool_call>wait()</tool_call>
+
+"""
+            
+            system_prompt += """Your previous thoughts:
 """
             
             # Add previous thoughts to the prompt
@@ -184,7 +214,21 @@ Your previous thoughts:
                 # Clear user messages after processing
                 user_messages[websocket] = []
             
-            system_prompt += "\n\nContinue thinking. If you want to send a message to the user, use the send_message_to_user tool."
+            # Build continuation instruction based on available tools
+            available_tools = []
+            if tool_config.get("send_message_to_user", True):
+                available_tools.append("send_message_to_user")
+            if tool_config.get("wait", True):
+                available_tools.append("wait")
+            
+            if available_tools:
+                system_prompt += "\n\nContinue thinking."
+                if "send_message_to_user" in available_tools:
+                    system_prompt += " If you want to send a message to the user, use the send_message_to_user tool."
+                if "wait" in available_tools:
+                    system_prompt += " If you need to pause and wait, use the wait tool."
+            else:
+                system_prompt += "\n\nContinue thinking. Note: All tools are currently disabled."
             
             # Get current timestamp
             current_timestamp = datetime.now().isoformat()
@@ -253,9 +297,15 @@ Your previous thoughts:
                     
                     # Parse for tool calls
                     tool_calls = parse_tool_calls(full_response)
+                    tool_config = tool_configs.get(websocket, {"send_message_to_user": True, "wait": True})
+                    
+                    wait_requested = False
                     
                     for tool_call in tool_calls:
-                        if tool_call["name"] == "send_message_to_user":
+                        tool_name = tool_call["name"]
+                        
+                        # Only process tool calls for enabled tools
+                        if tool_name == "send_message_to_user" and tool_config.get("send_message_to_user", True):
                             message = tool_call.get("args", {}).get("message", "")
                             # Send message to user via chat WebSocket
                             ai_msg = {
@@ -277,11 +327,33 @@ Your previous thoughts:
                                 "content": message,
                                 "timestamp": current_timestamp
                             })
+                        elif tool_name == "wait" and tool_config.get("wait", True):
+                            wait_requested = True
+                            # Notify debug about wait tool call
+                            await broadcast_to_debug({
+                                "type": "tool_call",
+                                "tool": "wait",
+                                "message": "Waiting 10 seconds...",
+                                "timestamp": current_timestamp
+                            })
+                        elif not tool_config.get(tool_name, False):
+                            # Tool is disabled, notify debug
+                            await broadcast_to_debug({
+                                "type": "tool_call",
+                                "tool": tool_name,
+                                "message": f"Tool '{tool_name}' is disabled and was ignored",
+                                "timestamp": current_timestamp
+                            })
                     
-                    # Small delay before next invocation (unless interrupted)
+                    # Handle delay before next invocation
                     interrupt_event = thinking_interrupt.get(websocket)
                     if not interrupt_event or not interrupt_event.is_set():
-                        await asyncio.sleep(1)
+                        if wait_requested:
+                            # Wait 10 seconds if wait tool was called
+                            await asyncio.sleep(10)
+                        else:
+                            # Normal 1 second delay
+                            await asyncio.sleep(1)
                     else:
                         # If interrupted, continue immediately to process user message
                         continue
@@ -319,16 +391,25 @@ Your previous thoughts:
 def parse_tool_calls(text: str) -> List[Dict]:
     """Parse tool calls from LLM response text"""
     tool_calls = []
+    
     # Look for <tool_call>send_message_to_user("message")</tool_call>
     pattern = r'<tool_call>send_message_to_user\("([^"]+)"\)</tool_call>'
     matches = re.finditer(pattern, text)
-    
     for match in matches:
         tool_calls.append({
             "name": "send_message_to_user",
             "args": {
                 "message": match.group(1)
             }
+        })
+    
+    # Look for <tool_call>wait()</tool_call>
+    pattern = r'<tool_call>wait\(\)</tool_call>'
+    matches = re.finditer(pattern, text)
+    for match in matches:
+        tool_calls.append({
+            "name": "wait",
+            "args": {}
         })
     
     return tool_calls
